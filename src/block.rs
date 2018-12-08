@@ -4,17 +4,46 @@ use std::ptr::NonNull;
 
 /// The first field in a block of memory.
 /// This type is treated as a u32, even though it's an usize.
-/// Contains the size of the block in its first 2 bytes.
+/// Contains the size of the previous block in its first 2 bytes and its own
+/// in the last 2 bytes.
 #[derive(Copy, Clone)]
 pub struct BlockHeader(usize);
 
 impl BlockHeader {
-    pub fn new(size: u16) -> Self {
-        BlockHeader((u32::from(size) << 16) as usize)
+    const PRED_FLAG: usize = 0xFFFF_0000;
+    const SIZE_FLAG: usize = 0x0000_FFFF;
+
+    pub fn new(pred_size: u16, size: u16) -> Self {
+        let pred = u32::from(pred_size) << 16;
+        let own = u32::from(size);
+        let word = pred | own;
+
+        BlockHeader(word as usize)
     }
 
     pub fn block_size(self) -> u16 {
+        self.0 as u16
+    }
+
+    pub fn pred_block_size(self) -> u16 {
         (self.0 as u32 >> 16) as u16
+    }
+}
+
+impl BlockHeader {
+    fn inc_size(&mut self, value: u16) {
+        let size = u32::from(self.block_size() + value);
+        self.0 = (self.0 & BlockHeader::PRED_FLAG) + size as usize;
+    }
+
+    fn set_size(&mut self, value: u16) {
+        self.0 = (self.0 & BlockHeader::PRED_FLAG) + value as usize;
+    }
+
+    fn set_pred_size(&mut self, value: u16) {
+        let size = (u32::from(value) << 16) as usize;
+        let cleared = self.0 & BlockHeader::SIZE_FLAG;
+        self.0 = size | cleared;
     }
 }
 
@@ -48,8 +77,8 @@ impl Into<usize> for BlockHeader {
 pub struct Block(NonNull<BlockHeader>);
 
 impl Block {
-    pub fn new(ptr: *mut usize, size: u16) -> Self {
-        let header = BlockHeader::new(size);
+    pub fn new(ptr: *mut usize, size: u16, pred_size: u16) -> Self {
+        let header = BlockHeader::new(pred_size, size);
         unsafe {
             *ptr = header.into();
 
@@ -62,8 +91,51 @@ impl Block {
 }
 
 impl Block {
+    pub fn inc_size(&mut self, value: u16) {
+        unsafe {
+            self.0.as_mut().inc_size(value);
+        }
+    }
+
+    pub fn set_size(&mut self, value: u16) {
+        unsafe {
+            self.0.as_mut().set_size(value);
+        }
+    }
+
+    pub fn set_pred_size(&mut self, value: u16) {
+        unsafe {
+            self.0.as_mut().set_pred_size(value);
+        }
+    }
+}
+
+impl Block {
     pub fn size(self) -> u16 {
         unsafe { self.0.as_ref().block_size() }
+    }
+
+    pub fn pred_size(self) -> u16 {
+        unsafe { self.0.as_ref().pred_block_size() }
+    }
+
+    pub fn next_block(self, heap_end: usize) -> Option<Block> {
+        let next_ptr = unsafe { self.0.as_ptr().add(self.size() as usize) };
+
+        if next_ptr as usize > heap_end {
+            return None;
+        }
+
+        NonNull::new(next_ptr).map(Block)
+    }
+
+    pub fn pred_block(self, heap_start: usize) -> Option<Block> {
+        let pred_ptr = unsafe { self.0.as_ptr().offset(self.size() as isize) };
+        if (pred_ptr as usize) < heap_start {
+            return None;
+        }
+
+        NonNull::new(pred_ptr).map(Block)
     }
 
     /// Splits the block by inserting a new header at self + size
@@ -71,15 +143,16 @@ impl Block {
         let current_size = self.size();
         assert!(current_size > size, "size too big");
 
-        let second_size = current_size - size;
+        let pred_size = self.pred_size();
 
+        let second_size = current_size - size;
         let ptr = self.0.as_ptr() as *mut usize;
 
         let second_ptr = ptr.add(size as usize);
-        *second_ptr = BlockHeader::new(second_size).into();
+        *second_ptr = BlockHeader::new(size, second_size).into();
         let second = Block(NonNull::new_unchecked(second_ptr as *mut BlockHeader));
 
-        *ptr = BlockHeader::new(size).into();
+        *ptr = BlockHeader::new(pred_size, size).into();
 
         (self, second)
     }
@@ -94,6 +167,12 @@ impl fmt::Debug for Block {
 impl Into<NonNull<BlockHeader>> for Block {
     fn into(self) -> NonNull<BlockHeader> {
         self.0
+    }
+}
+
+impl From<*mut BlockHeader> for Block {
+    fn from(value: *mut BlockHeader) -> Self {
+        Block(NonNull::new(value).expect("Null Pointer in Block"))
     }
 }
 
@@ -123,7 +202,27 @@ mod tests {
 
     #[test]
     fn test_block_header_new() {
-        let header = BlockHeader::new(42);
+        let header = BlockHeader::new(14, 42);
         assert_eq!(42, header.block_size());
+        assert_eq!(14, header.pred_block_size());
+    }
+
+    #[test]
+    fn test_block_header_change_sizes() {
+        let mut header = BlockHeader::new(42, 42);
+        assert_eq!(42, header.block_size());
+        assert_eq!(42, header.pred_block_size());
+
+        header.set_size(10);
+        assert_eq!(10, header.block_size());
+        assert_eq!(42, header.pred_block_size());
+
+        header.inc_size(2);
+        assert_eq!(12, header.block_size());
+        assert_eq!(42, header.pred_block_size());
+
+        header.set_pred_size(5);
+        assert_eq!(12, header.block_size());
+        assert_eq!(5, header.pred_block_size());
     }
 }

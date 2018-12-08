@@ -9,10 +9,16 @@ impl BlockVec {
         let mut block_vec = BlockVec::default();
 
         println!("{}", size);
-        let block = Block::new(ptr, size);
+        let block = Block::new(ptr, size, 0);
         block_vec.add_block(block);
 
         block_vec
+    }
+}
+
+impl BlockVec {
+    pub fn contains(&self, block: Block) -> bool {
+        self.0.contains(&block)
     }
 }
 
@@ -31,6 +37,10 @@ impl BlockVec {
         } else {
             None
         }
+    }
+
+    pub fn remove(&mut self, block: Block) {
+        self.0.remove(&block);
     }
 }
 

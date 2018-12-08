@@ -1,52 +1,24 @@
-use crate::block::BlockHeader;
+use crate::block::Block;
 use crate::block_vec::BlockVec;
 
-use core::marker::PhantomData;
 use core::ptr::NonNull;
 use std::alloc::{alloc, dealloc, Layout};
 use std::mem;
-use std::ops::Deref;
 use std::u16;
-
-#[derive(Copy, Clone)]
-pub struct Address<T> {
-    ptr: usize,
-    phantom: PhantomData<T>,
-}
-
-impl<T> Address<T> {
-    fn new(ptr: usize) -> Self {
-        Address {
-            ptr,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<T> Deref for Address<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        unsafe { &*(self.ptr as *mut T) }
-    }
-}
-
-impl<T> From<NonNull<T>> for Address<T> {
-    fn from(value: NonNull<T>) -> Self {
-        let us = value.as_ptr() as usize;
-        Self::new(us)
-    }
-}
 
 struct Heap {
     size: usize,
     data: *mut usize,
+    heap_end: usize,
     layout: Layout,
     free_blocks: BlockVec,
     used_blocks: BlockVec,
 }
 
 impl Heap {
+    const ALIGN: u16 = mem::align_of::<usize>() as u16;
+    const H_SIZE: u16 = mem::size_of::<usize>() as u16;
+
     pub unsafe fn new(layout: Layout) -> Self {
         let size = layout.size();
 
@@ -59,17 +31,16 @@ impl Heap {
             .cast::<usize>()
             .as_ptr();
 
+        let heap_end = data.add(size) as usize;
+
         Heap {
             size,
             data,
+            heap_end,
             layout,
             free_blocks: BlockVec::from_raw(data, size as u16),
             used_blocks: BlockVec::default(),
         }
-    }
-
-    unsafe fn address<T>(&mut self, address: &Address<T>) -> *mut T {
-        self.data.add(address.ptr) as *mut T
     }
 }
 
@@ -78,14 +49,17 @@ impl Heap {
         ((n + m - 1) / m) * m
     }
 
-    fn alloc(&mut self, size: u16) -> Option<Address<BlockHeader>> {
-        let align = mem::align_of::<usize>() as u16;
-        let h_size = mem::size_of::<usize>() as u16;
+    fn is_free(&self, block: Block) -> bool {
+        self.free_blocks.contains(block)
+    }
+}
 
-        let total_size = Heap::round_up(size + h_size, align);
+impl Heap {
+    fn alloc(&mut self, size: u16) -> Option<Block> {
+        let total_size = Heap::round_up(size + Heap::H_SIZE, Heap::ALIGN);
         let mut block = self.free_blocks.get_block(total_size)?;
 
-        if block.size() > (total_size + h_size * 2) {
+        if block.size() > (total_size + Heap::H_SIZE * 2) {
             unsafe {
                 let (first, second) = block.split_after(total_size);
                 block = first;
@@ -94,9 +68,35 @@ impl Heap {
         }
 
         self.used_blocks.add_block(block);
-        let block: NonNull<BlockHeader> = block.into();
+        Some(block)
+    }
 
-        Some(Address::from(block))
+    fn free(&mut self, mut block: Block) {
+        let mut size = block.size();
+
+        let next_block = block.next_block(self.heap_end);
+        if let Some(next) = next_block {
+            if self.is_free(next) {
+                self.free_blocks.remove(block);
+                size += next.size();
+            }
+        }
+
+        let pred_block = block.pred_block(self.data as usize);
+        if let Some(mut pred) = pred_block {
+            if self.is_free(pred) {
+                pred.inc_size(size);
+                size = pred.size();
+            } else {
+                block.set_size(size);
+                self.free_blocks.add_block(block);
+            }
+        }
+
+        let after_next = next_block.map(|next| next.next_block(self.heap_end));
+        if let Some(Some(mut after)) = after_next {
+            after.set_pred_size(size);
+        }
     }
 }
 
@@ -134,7 +134,7 @@ mod tests {
                 expected = 16;
             }
 
-            assert_eq!(expected, (*address).block_size());
+            assert_eq!(expected, address.size());
         }
     }
 
@@ -159,7 +159,7 @@ mod tests {
                 expected = 20;
             }
 
-            assert_eq!(expected, (*address).block_size());
+            assert_eq!(expected, address.size());
         }
     }
 
@@ -172,7 +172,7 @@ mod tests {
             let address = heap.alloc(0).unwrap();
             let expected = mem::size_of::<usize>() as u16;
 
-            assert_eq!(expected, (*address).block_size());
+            assert_eq!(expected, address.size());
         }
     }
 
