@@ -93,7 +93,9 @@ impl Heap {
             }
         }
 
+        self.used_blocks.add_block(block);
         let block: NonNull<BlockHeader> = block.into();
+
         Some(Address::from(block))
     }
 }
@@ -112,7 +114,7 @@ mod tests {
     use std::mem;
 
     #[test]
-    fn test_alloc_returns_correct_type() {
+    fn test_alloc_returns_correct_size_when_not_aligned() {
         unsafe {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
@@ -133,6 +135,65 @@ mod tests {
             }
 
             assert_eq!(expected, (*address).block_size());
+        }
+    }
+
+    #[test]
+    fn test_alloc_returns_correct_size_when_aligned() {
+        unsafe {
+            let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
+            let mut heap = Heap::new(layout.unwrap());
+
+            let address = heap.alloc(16).unwrap();
+            let expected;
+
+            #[cfg(target_pointer_width = "64")]
+            {
+                // (header size (8) + 16)
+                expected = 24;
+            }
+
+            #[cfg(target_pointer_width = "32")]
+            {
+                // (header size (4) + 16)
+                expected = 20;
+            }
+
+            assert_eq!(expected, (*address).block_size());
+        }
+    }
+
+    #[test]
+    fn test_alloc_zero_size_should_return_header_size() {
+        unsafe {
+            let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
+            let mut heap = Heap::new(layout.unwrap());
+
+            let address = heap.alloc(0).unwrap();
+            let expected = mem::size_of::<usize>() as u16;
+
+            assert_eq!(expected, (*address).block_size());
+        }
+    }
+
+    #[test]
+    fn test_alloc_splits_heap_block() {
+        unsafe {
+            let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
+            let mut heap = Heap::new(layout.unwrap());
+
+            heap.alloc(10).unwrap();
+
+            assert_eq!(1, heap.free_blocks.len());
+            assert_eq!(1, heap.used_blocks.len());
+
+            heap.alloc(29).unwrap();
+            assert_eq!(1, heap.free_blocks.len());
+            assert_eq!(2, heap.used_blocks.len());
+
+            heap.alloc(0).unwrap();
+            assert_eq!(1, heap.free_blocks.len());
+            assert_eq!(3, heap.used_blocks.len());
         }
     }
 }

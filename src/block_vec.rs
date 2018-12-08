@@ -33,3 +33,11 @@ impl BlockVec {
         }
     }
 }
+
+// only used in unit tests
+#[cfg(test)]
+impl BlockVec {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+}
