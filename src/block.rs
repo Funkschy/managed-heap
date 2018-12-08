@@ -122,7 +122,7 @@ impl Block {
     pub fn next_block(self, heap_end: usize) -> Option<Block> {
         let next_ptr = unsafe { self.0.as_ptr().add(self.size() as usize) };
 
-        if next_ptr as usize > heap_end {
+        if next_ptr as usize >= heap_end {
             return None;
         }
 
@@ -130,7 +130,15 @@ impl Block {
     }
 
     pub fn pred_block(self, heap_start: usize) -> Option<Block> {
-        let pred_ptr = unsafe { self.0.as_ptr().offset(self.size() as isize) };
+        let pred_size = self.pred_size();
+
+        if pred_size == 0 {
+            return None;
+        }
+
+        let offset = -(pred_size as isize);
+        let pred_ptr = unsafe { self.0.as_ptr().offset(offset) };
+
         if (pred_ptr as usize) < heap_start {
             return None;
         }
@@ -160,7 +168,12 @@ impl Block {
 
 impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Block ({})", self.size())
+        write!(
+            f,
+            "Block (pred: {}, size: {})",
+            self.pred_size(),
+            self.size()
+        )
     }
 }
 

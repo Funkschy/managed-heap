@@ -73,12 +73,16 @@ impl Heap {
 
     fn free(&mut self, mut block: Block) {
         let mut size = block.size();
+        self.used_blocks.remove(block);
 
         let next_block = block.next_block(self.heap_end);
+        let mut freed_next = false;
+
         if let Some(next) = next_block {
             if self.is_free(next) {
-                self.free_blocks.remove(block);
+                self.free_blocks.remove(next);
                 size += next.size();
+                freed_next = true;
             }
         }
 
@@ -91,11 +95,16 @@ impl Heap {
                 block.set_size(size);
                 self.free_blocks.add_block(block);
             }
+        } else {
+            block.set_size(size);
+            self.free_blocks.add_block(block);
         }
 
-        let after_next = next_block.map(|next| next.next_block(self.heap_end));
-        if let Some(Some(mut after)) = after_next {
-            after.set_pred_size(size);
+        if freed_next {
+            let after_next = next_block.map(|next| next.next_block(self.heap_end));
+            if let Some(Some(mut after)) = after_next {
+                after.set_pred_size(size);
+            }
         }
     }
 }
@@ -119,7 +128,7 @@ mod tests {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
 
-            let address = heap.alloc(10).unwrap();
+            let block = heap.alloc(10).unwrap();
             let expected;
 
             #[cfg(target_pointer_width = "64")]
@@ -134,7 +143,7 @@ mod tests {
                 expected = 16;
             }
 
-            assert_eq!(expected, address.size());
+            assert_eq!(expected, block.size());
         }
     }
 
@@ -144,7 +153,7 @@ mod tests {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
 
-            let address = heap.alloc(16).unwrap();
+            let block = heap.alloc(16).unwrap();
             let expected;
 
             #[cfg(target_pointer_width = "64")]
@@ -159,7 +168,7 @@ mod tests {
                 expected = 20;
             }
 
-            assert_eq!(expected, address.size());
+            assert_eq!(expected, block.size());
         }
     }
 
@@ -169,10 +178,10 @@ mod tests {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
 
-            let address = heap.alloc(0).unwrap();
+            let block = heap.alloc(0).unwrap();
             let expected = mem::size_of::<usize>() as u16;
 
-            assert_eq!(expected, address.size());
+            assert_eq!(expected, block.size());
         }
     }
 
@@ -194,6 +203,82 @@ mod tests {
             heap.alloc(0).unwrap();
             assert_eq!(1, heap.free_blocks.len());
             assert_eq!(3, heap.used_blocks.len());
+        }
+    }
+
+    #[test]
+    fn test_free_single_block() {
+        unsafe {
+            let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
+            let mut heap = Heap::new(layout.unwrap());
+            let block = heap.alloc(10).unwrap();
+
+            assert_eq!(1, heap.free_blocks.len());
+            assert_eq!(1, heap.used_blocks.len());
+
+            heap.free(block);
+
+            assert_eq!(1, heap.free_blocks.len());
+            assert_eq!(0, heap.used_blocks.len());
+        }
+    }
+
+    #[test]
+    fn test_free_adjacent_blocks() {
+        unsafe {
+            let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
+            let mut heap = Heap::new(layout.unwrap());
+
+            let first_block = heap.alloc(10).unwrap();
+            let second_block = heap.alloc(50).unwrap();
+            let third_block = heap.alloc(1024).unwrap();
+
+            // [used] [used] [used] [free]
+
+            assert_eq!(1, heap.free_blocks.len());
+            assert_eq!(3, heap.used_blocks.len());
+
+            heap.free(first_block);
+
+            // [free] [used] [used] [free]
+
+            assert_eq!(2, heap.free_blocks.len());
+            assert_eq!(2, heap.used_blocks.len());
+
+            heap.free(third_block);
+
+            // [free] [used] [free]
+
+            assert_eq!(2, heap.free_blocks.len());
+            assert_eq!(1, heap.used_blocks.len());
+
+            heap.free(second_block);
+
+            // [free]
+
+            assert_eq!(1, heap.free_blocks.len());
+            assert_eq!(0, heap.used_blocks.len());
+        }
+    }
+
+    #[test]
+    fn test_alloc_and_free_entire_heap() {
+        unsafe {
+            let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
+            let mut heap = Heap::new(layout.unwrap());
+
+            let size = 4096 - mem::size_of::<usize>();
+            let block = heap.alloc(size as u16).unwrap();
+
+            assert_eq!(None, block.pred_block(heap.data as usize));
+            assert_eq!(None, block.next_block(heap.heap_end));
+            assert_eq!(1, heap.used_blocks.len());
+            assert_eq!(0, heap.free_blocks.len());
+
+            heap.free(block);
+
+            assert_eq!(0, heap.used_blocks.len());
+            assert_eq!(1, heap.free_blocks.len());
         }
     }
 }

@@ -8,7 +8,6 @@ impl BlockVec {
     pub fn from_raw(ptr: *mut usize, size: u16) -> Self {
         let mut block_vec = BlockVec::default();
 
-        println!("{}", size);
         let block = Block::new(ptr, size, 0);
         block_vec.add_block(block);
 
@@ -28,8 +27,6 @@ impl BlockVec {
     }
 
     pub fn get_block(&mut self, min_size: u16) -> Option<Block> {
-        println!("{:?}", self.0);
-
         let block = self.0.iter().find(|b| b.size() >= min_size);
         if let Some(b) = block {
             let b = *b;
