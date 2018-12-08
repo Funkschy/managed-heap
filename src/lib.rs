@@ -1,7 +1,5 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+mod block;
+mod block_vec;
+#[allow(dead_code)]
+mod heap;
+mod trace;
