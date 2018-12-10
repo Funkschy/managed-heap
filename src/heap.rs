@@ -1,5 +1,5 @@
 use crate::block::Block;
-use crate::block_vec::BlockVec;
+use crate::block_set::BlockSet;
 
 use core::ptr::NonNull;
 use std::alloc::{alloc, dealloc, Layout};
@@ -11,8 +11,8 @@ struct Heap {
     data: *mut usize,
     heap_end: usize,
     layout: Layout,
-    free_blocks: BlockVec,
-    used_blocks: BlockVec,
+    free_blocks: BlockSet,
+    used_blocks: BlockSet,
 }
 
 impl Heap {
@@ -38,8 +38,8 @@ impl Heap {
             data,
             heap_end,
             layout,
-            free_blocks: BlockVec::from_raw(data, size as u16),
-            used_blocks: BlockVec::default(),
+            free_blocks: BlockSet::from_raw(data, size as u16),
+            used_blocks: BlockSet::default(),
         }
     }
 }

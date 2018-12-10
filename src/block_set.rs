@@ -2,11 +2,11 @@ use crate::block::Block;
 use std::collections::BTreeSet;
 
 #[derive(Default)]
-pub struct BlockVec(BTreeSet<Block>);
+pub struct BlockSet(BTreeSet<Block>);
 
-impl BlockVec {
+impl BlockSet {
     pub fn from_raw(ptr: *mut usize, size: u16) -> Self {
-        let mut block_vec = BlockVec::default();
+        let mut block_vec = BlockSet::default();
 
         let block = Block::new(ptr, size, 0);
         block_vec.add_block(block);
@@ -15,13 +15,13 @@ impl BlockVec {
     }
 }
 
-impl BlockVec {
+impl BlockSet {
     pub fn contains(&self, block: Block) -> bool {
         self.0.contains(&block)
     }
 }
 
-impl BlockVec {
+impl BlockSet {
     pub fn add_block(&mut self, block: Block) {
         self.0.insert(block);
     }
@@ -43,7 +43,7 @@ impl BlockVec {
 
 // only used in unit tests
 #[cfg(test)]
-impl BlockVec {
+impl BlockSet {
     pub fn len(&self) -> usize {
         self.0.len()
     }

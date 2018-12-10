@@ -1,5 +1,5 @@
 mod block;
-mod block_vec;
+mod block_set;
 #[allow(dead_code)]
 mod heap;
 mod trace;
