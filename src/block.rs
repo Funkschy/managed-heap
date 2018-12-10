@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt;
+use std::mem;
 use std::ptr::NonNull;
 
 /// The first field in a block of memory.
@@ -91,6 +92,17 @@ impl Block {
 }
 
 impl Block {
+    /// Writes value to memory after offset * size_of::<usize>() bytes.
+    pub fn write_at(&mut self, offset: u16, value: usize) {
+        assert!(offset % (mem::size_of::<usize>() as u16) == 0);
+        assert!(offset < self.size());
+
+        unsafe {
+            // add one to offset, to skip header
+            *(self.0.as_ptr() as *mut usize).add(1 + offset as usize) = value;
+        }
+    }
+
     pub fn inc_size(&mut self, value: u16) {
         unsafe {
             self.0.as_mut().inc_size(value);

@@ -1,3 +1,4 @@
+use crate::address::{Address, LookupTable};
 use crate::block::Block;
 use crate::block_set::BlockSet;
 
@@ -6,16 +7,16 @@ use std::alloc::{alloc, dealloc, Layout};
 use std::mem;
 use std::u16;
 
-struct Heap {
+pub struct Heap<'a> {
     size: usize,
     data: *mut usize,
     heap_end: usize,
     layout: Layout,
     free_blocks: BlockSet,
-    used_blocks: BlockSet,
+    used_blocks: LookupTable<'a>,
 }
 
-impl Heap {
+impl<'a> Heap<'a> {
     const ALIGN: u16 = mem::align_of::<usize>() as u16;
     const H_SIZE: u16 = mem::size_of::<usize>() as u16;
 
@@ -39,12 +40,12 @@ impl Heap {
             heap_end,
             layout,
             free_blocks: BlockSet::from_raw(data, size as u16),
-            used_blocks: BlockSet::default(),
+            used_blocks: LookupTable::default(),
         }
     }
 }
 
-impl Heap {
+impl<'a> Heap<'a> {
     fn round_up(n: u16, m: u16) -> u16 {
         ((n + m - 1) / m) * m
     }
@@ -52,10 +53,20 @@ impl Heap {
     fn is_free(&self, block: Block) -> bool {
         self.free_blocks.contains(block)
     }
+
+    pub fn size(&self) -> usize {
+        self.size
+    }
 }
 
-impl Heap {
-    fn alloc(&mut self, size: u16) -> Option<Block> {
+impl<'a> Heap<'a> {
+    pub fn alloc(&mut self, size: u16) -> Option<Address<'a>> {
+        let block = self.alloc_block(size)?;
+        let address = self.used_blocks.add_block(block);
+        Some(address)
+    }
+
+    fn alloc_block(&mut self, size: u16) -> Option<Block> {
         let total_size = Heap::round_up(size + Heap::H_SIZE, Heap::ALIGN);
         let mut block = self.free_blocks.get_block(total_size)?;
 
@@ -67,13 +78,16 @@ impl Heap {
             }
         }
 
-        self.used_blocks.add_block(block);
         Some(block)
     }
 
-    fn free(&mut self, mut block: Block) {
+    pub fn free(&mut self, address: Address<'a>) {
+        let mut block = self
+            .used_blocks
+            .remove_block(address)
+            .expect("Invalid Address");
+
         let mut size = block.size();
-        self.used_blocks.remove(block);
 
         let next_block = block.next_block(self.heap_end);
         let mut freed_next = false;
@@ -109,7 +123,7 @@ impl Heap {
     }
 }
 
-impl Drop for Heap {
+impl<'a> Drop for Heap<'a> {
     fn drop(&mut self) {
         unsafe {
             dealloc(self.data as *mut u8, self.layout);
@@ -123,12 +137,12 @@ mod tests {
     use std::mem;
 
     #[test]
-    fn test_alloc_returns_correct_size_when_not_aligned() {
+    fn test_alloc_block_returns_correct_size_when_not_aligned() {
         unsafe {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
 
-            let block = heap.alloc(10).unwrap();
+            let block = heap.alloc_block(10).unwrap();
             let expected;
 
             #[cfg(target_pointer_width = "64")]
@@ -148,12 +162,12 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_returns_correct_size_when_aligned() {
+    fn test_alloc_block_returns_correct_size_when_aligned() {
         unsafe {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
 
-            let block = heap.alloc(16).unwrap();
+            let block = heap.alloc_block(16).unwrap();
             let expected;
 
             #[cfg(target_pointer_width = "64")]
@@ -173,12 +187,12 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_zero_size_should_return_header_size() {
+    fn test_alloc_block_zero_size_should_return_header_size() {
         unsafe {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
 
-            let block = heap.alloc(0).unwrap();
+            let block = heap.alloc_block(0).unwrap();
             let expected = mem::size_of::<usize>() as u16;
 
             assert_eq!(expected, block.size());
@@ -186,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_splits_heap_block() {
+    fn test_alloc_block_splits_heap_block() {
         unsafe {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
@@ -211,12 +225,12 @@ mod tests {
         unsafe {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
-            let block = heap.alloc(10).unwrap();
+            let address = heap.alloc(10).unwrap();
 
             assert_eq!(1, heap.free_blocks.len());
             assert_eq!(1, heap.used_blocks.len());
 
-            heap.free(block);
+            heap.free(address);
 
             assert_eq!(1, heap.free_blocks.len());
             assert_eq!(0, heap.used_blocks.len());
@@ -229,30 +243,30 @@ mod tests {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
 
-            let first_block = heap.alloc(10).unwrap();
-            let second_block = heap.alloc(50).unwrap();
-            let third_block = heap.alloc(1024).unwrap();
+            let first_address = heap.alloc(10).unwrap();
+            let second_address = heap.alloc(50).unwrap();
+            let third_address = heap.alloc(1024).unwrap();
 
             // [used] [used] [used] [free]
 
             assert_eq!(1, heap.free_blocks.len());
             assert_eq!(3, heap.used_blocks.len());
 
-            heap.free(first_block);
+            heap.free(first_address);
 
             // [free] [used] [used] [free]
 
             assert_eq!(2, heap.free_blocks.len());
             assert_eq!(2, heap.used_blocks.len());
 
-            heap.free(third_block);
+            heap.free(third_address);
 
             // [free] [used] [free]
 
             assert_eq!(2, heap.free_blocks.len());
             assert_eq!(1, heap.used_blocks.len());
 
-            heap.free(second_block);
+            heap.free(second_address);
 
             // [free]
 
@@ -262,23 +276,42 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_and_free_entire_heap() {
+    fn test_alloc_block_and_free_entire_heap() {
         unsafe {
             let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
             let mut heap = Heap::new(layout.unwrap());
 
             let size = 4096 - mem::size_of::<usize>();
-            let block = heap.alloc(size as u16).unwrap();
+            let address = heap.alloc(size as u16).unwrap();
+
+            let block: Block = address.into();
 
             assert_eq!(None, block.pred_block(heap.data as usize));
             assert_eq!(None, block.next_block(heap.heap_end));
             assert_eq!(1, heap.used_blocks.len());
             assert_eq!(0, heap.free_blocks.len());
 
-            heap.free(block);
+            heap.free(address);
 
             assert_eq!(0, heap.used_blocks.len());
             assert_eq!(1, heap.free_blocks.len());
+        }
+    }
+
+    #[test]
+    fn test_write_allocated_block() {
+        unsafe {
+            let layout = Layout::from_size_align(4096, mem::align_of::<usize>());
+            let mut heap = Heap::new(layout.unwrap());
+
+            let address = heap.alloc(1).unwrap();
+            let mut block: Block = address.into();
+
+            let expected = (2 * mem::size_of::<usize>()) as u16;
+            assert_eq!(expected, block.size());
+
+            block.write_at(0, 42);
+            assert_eq!(42, *address);
         }
     }
 }

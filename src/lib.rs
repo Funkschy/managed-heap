@@ -1,5 +1,5 @@
+mod address;
 mod block;
 mod block_set;
-#[allow(dead_code)]
-mod heap;
+pub mod heap;
 mod trace;
