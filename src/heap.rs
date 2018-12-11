@@ -1,4 +1,4 @@
-use crate::address::{Address, LookupTable};
+use crate::address::Address;
 use crate::block::Block;
 use crate::block_set::BlockSet;
 
@@ -7,16 +7,16 @@ use std::alloc::{alloc, dealloc, Layout};
 use std::mem;
 use std::u16;
 
-pub struct Heap<'a> {
+pub struct Heap {
     size: usize,
     data: *mut usize,
     heap_end: usize,
     layout: Layout,
     free_blocks: BlockSet,
-    used_blocks: LookupTable<'a>,
+    used_blocks: BlockSet,
 }
 
-impl<'a> Heap<'a> {
+impl Heap {
     const ALIGN: u16 = mem::align_of::<usize>() as u16;
     const H_SIZE: u16 = mem::size_of::<usize>() as u16;
 
@@ -40,12 +40,12 @@ impl<'a> Heap<'a> {
             heap_end,
             layout,
             free_blocks: BlockSet::from_raw(data, size as u16),
-            used_blocks: LookupTable::default(),
+            used_blocks: BlockSet::default(),
         }
     }
 }
 
-impl<'a> Heap<'a> {
+impl Heap {
     fn round_up(n: u16, m: u16) -> u16 {
         // division basically works as floor
         ((n + m - 1) / m) * m
@@ -60,11 +60,11 @@ impl<'a> Heap<'a> {
     }
 }
 
-impl<'a> Heap<'a> {
-    pub fn alloc(&mut self, size: u16) -> Option<Address<'a>> {
+impl Heap {
+    pub fn alloc<'a>(&mut self, size: u16) -> Option<Address<'a>> {
         let block = self.alloc_block(size)?;
-        let address = self.used_blocks.add_block(block);
-        Some(address)
+        self.used_blocks.add_block(block);
+        Some(Address::from(block))
     }
 
     fn alloc_block(&mut self, size: u16) -> Option<Block> {
@@ -82,11 +82,9 @@ impl<'a> Heap<'a> {
         Some(block)
     }
 
-    pub fn free(&mut self, address: Address<'a>) {
-        let mut block = self
-            .used_blocks
-            .remove_block(address)
-            .expect("Invalid Address");
+    pub fn free<'a>(&mut self, address: Address<'a>) {
+        let mut block: Block = address.into();
+        self.used_blocks.remove_block(block);
 
         let mut size = block.size();
 
@@ -95,7 +93,7 @@ impl<'a> Heap<'a> {
 
         if let Some(next) = next_block {
             if self.is_free(next) {
-                self.free_blocks.remove(next);
+                self.free_blocks.remove_block(next);
                 size += next.size();
                 freed_next = true;
             }
@@ -124,7 +122,7 @@ impl<'a> Heap<'a> {
     }
 }
 
-impl<'a> Drop for Heap<'a> {
+impl Drop for Heap {
     fn drop(&mut self) {
         unsafe {
             dealloc(self.data as *mut u8, self.layout);

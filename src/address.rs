@@ -1,6 +1,5 @@
 use crate::block::{Block, BlockHeader};
 use core::ptr::NonNull;
-use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
@@ -45,25 +44,13 @@ impl<'a> Deref for Address<'a> {
     }
 }
 
-#[derive(Default)]
-pub struct LookupTable<'a>(BTreeMap<Address<'a>, Block>);
-
-impl<'a> LookupTable<'a> {
-    pub fn add_block(&mut self, block: Block) -> Address<'a> {
-        let address = Address::from(block);
-        self.0.insert(address, block);
-        address
-    }
-
-    pub fn remove_block(&mut self, address: Address<'a>) -> Option<Block> {
-        self.0.remove(&address)
-    }
-}
-
-// only used in unit tests
 #[cfg(test)]
-impl<'a> LookupTable<'a> {
-    pub fn len(&self) -> usize {
-        self.0.len()
+mod tests {
+    use super::*;
+    use std::mem;
+
+    #[test]
+    fn test_address_has_same_size_as_usize() {
+        assert_eq!(mem::size_of::<usize>(), mem::size_of::<Address>());
     }
 }

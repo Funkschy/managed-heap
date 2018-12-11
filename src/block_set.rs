@@ -36,7 +36,7 @@ impl BlockSet {
         }
     }
 
-    pub fn remove(&mut self, block: Block) {
+    pub fn remove_block(&mut self, block: Block) {
         self.0.remove(&block);
     }
 }
