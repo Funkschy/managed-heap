@@ -47,6 +47,7 @@ impl<'a> Heap<'a> {
 
 impl<'a> Heap<'a> {
     fn round_up(n: u16, m: u16) -> u16 {
+        // division basically works as floor
         ((n + m - 1) / m) * m
     }
 
