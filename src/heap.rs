@@ -1,11 +1,12 @@
 use crate::address::Address;
+use crate::block::set::BlockSet;
 use crate::block::Block;
-use crate::block_set::BlockSet;
+use crate::types::*;
 
 use core::ptr::NonNull;
 use std::alloc::{alloc, dealloc, Layout};
+use std::iter::Iterator;
 use std::mem;
-use std::u16;
 
 pub struct Heap {
     size: usize,
@@ -17,14 +18,14 @@ pub struct Heap {
 }
 
 impl Heap {
-    const ALIGN: u16 = mem::align_of::<usize>() as u16;
-    const H_SIZE: u16 = mem::size_of::<usize>() as u16;
+    const ALIGN: HalfWord = mem::align_of::<usize>() as HalfWord;
+    const H_SIZE: HalfWord = mem::size_of::<usize>() as HalfWord;
 
     pub unsafe fn new(layout: Layout) -> Self {
         let size = layout.size();
 
-        if size > u16::MAX as usize {
-            panic!("Size too big (MAX: {})", u16::MAX);
+        if size > HALF_WORD_MAX as usize {
+            panic!("Size too big (MAX: {})", HALF_WORD_MAX);
         }
 
         let data = NonNull::new(alloc(layout))
@@ -39,14 +40,14 @@ impl Heap {
             data,
             heap_end,
             layout,
-            free_blocks: BlockSet::from_raw(data, size as u16),
+            free_blocks: BlockSet::from_raw(data, size as HalfWord),
             used_blocks: BlockSet::default(),
         }
     }
 }
 
 impl Heap {
-    fn round_up(n: u16, m: u16) -> u16 {
+    fn round_up(n: HalfWord, m: HalfWord) -> HalfWord {
         // division basically works as floor
         ((n + m - 1) / m) * m
     }
@@ -61,13 +62,13 @@ impl Heap {
 }
 
 impl Heap {
-    pub fn alloc<'a>(&mut self, size: u16) -> Option<Address<'a>> {
+    pub fn alloc<'a>(&mut self, size: HalfWord) -> Option<Address<'a>> {
         let block = self.alloc_block(size)?;
         self.used_blocks.add_block(block);
         Some(Address::from(block))
     }
 
-    fn alloc_block(&mut self, size: u16) -> Option<Block> {
+    fn alloc_block(&mut self, size: HalfWord) -> Option<Block> {
         let total_size = Heap::round_up(size + Heap::H_SIZE, Heap::ALIGN);
         let mut block = self.free_blocks.get_block(total_size)?;
 
@@ -119,6 +120,12 @@ impl Heap {
                 after.set_pred_size(size);
             }
         }
+    }
+}
+
+impl Heap {
+    pub fn used<'a>(&'a self) -> Box<Iterator<Item = &Block> + 'a> {
+        self.used_blocks.iter()
     }
 }
 
@@ -192,7 +199,7 @@ mod tests {
             let mut heap = Heap::new(layout.unwrap());
 
             let block = heap.alloc_block(0).unwrap();
-            let expected = mem::size_of::<usize>() as u16;
+            let expected = mem::size_of::<usize>() as HalfWord;
 
             assert_eq!(expected, block.size());
         }
@@ -281,7 +288,7 @@ mod tests {
             let mut heap = Heap::new(layout.unwrap());
 
             let size = 4096 - mem::size_of::<usize>();
-            let address = heap.alloc(size as u16).unwrap();
+            let address = heap.alloc(size as HalfWord).unwrap();
 
             let block: Block = address.into();
 
@@ -306,7 +313,7 @@ mod tests {
             let address = heap.alloc(1).unwrap();
             let mut block: Block = address.into();
 
-            let expected = (2 * mem::size_of::<usize>()) as u16;
+            let expected = (2 * mem::size_of::<usize>()) as HalfWord;
             assert_eq!(expected, block.size());
 
             block.write_at(0, 42);

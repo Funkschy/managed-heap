@@ -12,5 +12,6 @@ impl ManagedHeap {
         }
 
         // TODO iter over used_blocks and free
+        // self.heap.iter().filter(|b| b)
     }
 }

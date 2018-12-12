@@ -1,84 +1,19 @@
+use self::header::BlockHeader;
+use super::types::HalfWord;
+
 use std::cmp::Ordering;
 use std::fmt;
 use std::mem;
 use std::ptr::NonNull;
 
-/// The first field in a block of memory.
-/// This type is treated as a u32, even though it's an usize.
-/// Contains the size of the previous block in its first 2 bytes and its own
-/// in the last 2 bytes.
-#[derive(Copy, Clone)]
-pub struct BlockHeader(usize);
-
-impl BlockHeader {
-    const PRED_FLAG: usize = 0xFFFF_0000;
-    const SIZE_FLAG: usize = 0x0000_FFFF;
-
-    pub fn new(pred_size: u16, size: u16) -> Self {
-        let pred = u32::from(pred_size) << 16;
-        let own = u32::from(size);
-        let word = pred | own;
-
-        BlockHeader(word as usize)
-    }
-
-    pub fn block_size(self) -> u16 {
-        self.0 as u16
-    }
-
-    pub fn pred_block_size(self) -> u16 {
-        (self.0 as u32 >> 16) as u16
-    }
-}
-
-impl BlockHeader {
-    fn inc_size(&mut self, value: u16) {
-        let size = u32::from(self.block_size() + value);
-        self.0 = (self.0 & BlockHeader::PRED_FLAG) + size as usize;
-    }
-
-    fn set_size(&mut self, value: u16) {
-        self.0 = (self.0 & BlockHeader::PRED_FLAG) + value as usize;
-    }
-
-    fn set_pred_size(&mut self, value: u16) {
-        let size = (u32::from(value) << 16) as usize;
-        let cleared = self.0 & BlockHeader::SIZE_FLAG;
-        self.0 = size | cleared;
-    }
-}
-
-impl PartialOrd for BlockHeader {
-    fn partial_cmp(&self, other: &BlockHeader) -> Option<Ordering> {
-        Some(self.block_size().cmp(&other.block_size()))
-    }
-}
-
-impl Ord for BlockHeader {
-    fn cmp(&self, other: &BlockHeader) -> Ordering {
-        self.block_size().cmp(&other.block_size())
-    }
-}
-
-impl PartialEq for BlockHeader {
-    fn eq(&self, other: &BlockHeader) -> bool {
-        self.block_size() == other.block_size()
-    }
-}
-
-impl Eq for BlockHeader {}
-
-impl Into<usize> for BlockHeader {
-    fn into(self) -> usize {
-        self.0
-    }
-}
+pub mod header;
+pub mod set;
 
 #[derive(Copy, Clone)]
 pub struct Block(NonNull<BlockHeader>);
 
 impl Block {
-    pub fn new(ptr: *mut usize, size: u16, pred_size: u16) -> Self {
+    pub fn new(ptr: *mut usize, size: HalfWord, pred_size: HalfWord) -> Self {
         let header = BlockHeader::new(pred_size, size);
         unsafe {
             *ptr = header.into();
@@ -93,8 +28,8 @@ impl Block {
 
 impl Block {
     /// Writes value to memory after offset * size_of::<usize>() bytes.
-    pub fn write_at(&mut self, offset: u16, value: usize) {
-        assert!(offset % (mem::size_of::<usize>() as u16) == 0);
+    pub fn write_at(&mut self, offset: HalfWord, value: usize) {
+        assert!(offset % (mem::size_of::<usize>() as HalfWord) == 0);
         assert!(offset < self.size());
 
         unsafe {
@@ -103,19 +38,19 @@ impl Block {
         }
     }
 
-    pub fn inc_size(&mut self, value: u16) {
+    pub fn inc_size(&mut self, value: HalfWord) {
         unsafe {
             self.0.as_mut().inc_size(value);
         }
     }
 
-    pub fn set_size(&mut self, value: u16) {
+    pub fn set_size(&mut self, value: HalfWord) {
         unsafe {
             self.0.as_mut().set_size(value);
         }
     }
 
-    pub fn set_pred_size(&mut self, value: u16) {
+    pub fn set_pred_size(&mut self, value: HalfWord) {
         unsafe {
             self.0.as_mut().set_pred_size(value);
         }
@@ -123,11 +58,11 @@ impl Block {
 }
 
 impl Block {
-    pub fn size(self) -> u16 {
+    pub fn size(self) -> HalfWord {
         unsafe { self.0.as_ref().block_size() }
     }
 
-    pub fn pred_size(self) -> u16 {
+    pub fn pred_size(self) -> HalfWord {
         unsafe { self.0.as_ref().pred_block_size() }
     }
 
@@ -159,7 +94,7 @@ impl Block {
     }
 
     /// Splits the block by inserting a new header at self + size
-    pub unsafe fn split_after(self, size: u16) -> (Block, Block) {
+    pub unsafe fn split_after(self, size: HalfWord) -> (Block, Block) {
         let current_size = self.size();
         assert!(current_size > size, "size too big");
 

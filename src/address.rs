@@ -1,4 +1,5 @@
-use crate::block::{Block, BlockHeader};
+use crate::block::header::BlockHeader;
+use crate::block::Block;
 use core::ptr::NonNull;
 use std::marker::PhantomData;
 use std::ops::Deref;
