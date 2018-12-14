@@ -1,9 +1,8 @@
 use self::header::BlockHeader;
-use super::types::HalfWord;
+use super::types::{HalfWord, WORD_SIZE};
 
 use std::cmp::Ordering;
 use std::fmt;
-use std::mem;
 use std::ptr::NonNull;
 
 pub mod header;
@@ -13,6 +12,7 @@ pub mod set;
 pub struct Block(NonNull<BlockHeader>);
 
 impl Block {
+    /// Takes a ptr to allocated memory of the specified size in bytes
     pub fn new(ptr: *mut usize, size: HalfWord, pred_size: HalfWord) -> Self {
         let header = BlockHeader::new(pred_size, size);
         unsafe {
@@ -29,8 +29,10 @@ impl Block {
 impl Block {
     /// Writes value to memory after offset * size_of::<usize>() bytes.
     pub fn write_at(&mut self, offset: HalfWord, value: usize) {
-        assert!(offset % (mem::size_of::<usize>() as HalfWord) == 0);
-        assert!(offset < self.size());
+        assert!(
+            (offset as usize * WORD_SIZE) < self.size() as usize,
+            "Offset is out of bounds"
+        );
 
         unsafe {
             // add one to offset, to skip header
@@ -184,5 +186,39 @@ mod tests {
         header.set_pred_size(5);
         assert_eq!(12, header.block_size());
         assert_eq!(5, header.pred_block_size());
+    }
+
+    #[test]
+    #[should_panic(expected = "Offset is out of bounds")]
+    fn test_block_write_panics_if_out_of_bounds() {
+        use super::super::address::Address;
+        use std::alloc::{alloc, dealloc, Layout};
+        use std::mem;
+
+        unsafe {
+            // Header + 2 fields
+            let size = WORD_SIZE * 3;
+            let align = mem::align_of::<usize>();
+
+            let layout = Layout::from_size_align_unchecked(size, align);
+            let ptr = NonNull::new_unchecked(alloc(layout)).cast::<usize>();
+            let ptr = ptr.as_ptr();
+
+            let mut block = Block::new(ptr, size as HalfWord, 0);
+            block.write_at(0, 20);
+
+            let address = Address::from(block);
+            assert_eq!(20, *address);
+
+            block.write_at(1, 21);
+
+            let address = Address::from(block);
+            assert_eq!(21, *address.add(1));
+
+            // this should panic
+            block.write_at(3, 13);
+
+            dealloc(ptr as *mut u8, layout);
+        }
     }
 }

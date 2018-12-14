@@ -1,3 +1,5 @@
+use std::mem;
+
 #[cfg(target_pointer_width = "64")]
 mod inner {
     pub use std::u32;
@@ -21,3 +23,5 @@ mod inner {
 }
 
 pub use self::inner::*;
+
+pub const WORD_SIZE: usize = mem::size_of::<usize>();

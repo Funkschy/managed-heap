@@ -46,8 +46,6 @@ impl BlockSet {
     }
 }
 
-// only used in unit tests
-#[cfg(test)]
 impl BlockSet {
     pub fn len(&self) -> usize {
         self.0.len()

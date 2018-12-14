@@ -1,34 +1,55 @@
 use crate::block::header::BlockHeader;
 use crate::block::Block;
 use core::ptr::NonNull;
-use std::marker::PhantomData;
 use std::ops::Deref;
 
-#[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
-pub struct Address<'a> {
+#[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
+pub struct Address {
     ptr: usize,
-    phantom: PhantomData<&'a usize>,
 }
 
-impl<'a> Address<'a> {
+impl Address {
     pub fn new(ptr: NonNull<BlockHeader>) -> Self {
         unsafe {
             Address {
                 ptr: ptr.as_ptr().add(1) as usize,
-                phantom: PhantomData,
             }
+        }
+    }
+
+    fn from_usize_ptr(ptr: *mut usize) -> Self {
+        Address { ptr: ptr as usize }
+    }
+}
+
+impl Address {
+    pub fn add(&self, value: usize) -> Self {
+        let ptr = self.ptr as *mut usize;
+        unsafe { Address::from_usize_ptr(ptr.add(value)) }
+    }
+}
+
+impl Address {
+    pub fn as_mut(&mut self) -> *mut usize {
+        self.ptr as *mut usize
+    }
+
+    pub fn write(&mut self, value: usize) {
+        let ptr = self.as_mut();
+        unsafe {
+            *ptr = value;
         }
     }
 }
 
-impl<'a> From<Block> for Address<'a> {
-    fn from(value: Block) -> Address<'a> {
+impl From<Block> for Address {
+    fn from(value: Block) -> Address {
         let ptr: NonNull<BlockHeader> = value.into();
         Address::new(ptr)
     }
 }
 
-impl<'a> Into<Block> for Address<'a> {
+impl Into<Block> for Address {
     fn into(self) -> Block {
         unsafe {
             let ptr = (self.ptr as *mut usize).offset(-1) as *mut BlockHeader;
@@ -37,7 +58,7 @@ impl<'a> Into<Block> for Address<'a> {
     }
 }
 
-impl<'a> Deref for Address<'a> {
+impl Deref for Address {
     type Target = usize;
 
     fn deref(&self) -> &usize {

@@ -3,8 +3,8 @@ use std::cmp::Ordering;
 use std::mem;
 
 /// The first field in a block of memory.
-/// Contains the size of the previous block in its first 2 bytes and its own
-/// in the last 2 bytes.
+/// Contains the size of the previous block in its first half and its own
+/// size in the second half.
 #[derive(Copy, Clone)]
 pub struct BlockHeader(usize);
 
