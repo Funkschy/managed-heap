@@ -12,7 +12,7 @@ pub mod set;
 pub struct Block(NonNull<BlockHeader>);
 
 impl Block {
-    /// Takes a ptr to allocated memory of the specified size in bytes
+    /// Takes a ptr to allocated memory of the specified size in usizes
     pub fn new(ptr: *mut usize, size: HalfWord, pred_size: HalfWord) -> Self {
         let header = BlockHeader::new(pred_size, size);
         unsafe {

@@ -34,6 +34,7 @@ impl Heap {
             .cast::<usize>()
             .as_ptr();
 
+        let size = size / Heap::H_SIZE as usize;
         let heap_end = data.add(size) as usize;
 
         Heap {
@@ -76,10 +77,10 @@ impl Heap {
     }
 
     fn alloc_block(&mut self, size: HalfWord) -> Option<Block> {
-        let total_size = (size + 1) * Heap::H_SIZE;
+        let total_size = size + 1;
         let mut block = self.free_blocks.get_block(total_size)?;
 
-        if block.size() > (total_size + Heap::H_SIZE * 2) {
+        if block.size() > (total_size + 2) {
             unsafe {
                 let (first, second) = block.split_after(total_size);
                 block = first;
@@ -155,17 +156,7 @@ mod tests {
             let mut heap = Heap::new(4096);
 
             let block = heap.alloc_block(10).unwrap();
-            let expected;
-
-            #[cfg(target_pointer_width = "64")]
-            {
-                expected = 88;
-            }
-
-            #[cfg(target_pointer_width = "32")]
-            {
-                expected = 44;
-            }
+            let expected = 11;
 
             assert_eq!(expected, block.size());
         }
@@ -177,17 +168,7 @@ mod tests {
             let mut heap = Heap::new(4096);
 
             let block = heap.alloc_block(16).unwrap();
-            let expected;
-
-            #[cfg(target_pointer_width = "64")]
-            {
-                expected = 136;
-            }
-
-            #[cfg(target_pointer_width = "32")]
-            {
-                expected = 68;
-            }
+            let expected = 17;
 
             assert_eq!(expected, block.size());
         }
@@ -199,7 +180,7 @@ mod tests {
             let mut heap = Heap::new(4096);
 
             let block = heap.alloc_block(0).unwrap();
-            let expected = mem::size_of::<usize>() as HalfWord;
+            let expected = 1;
 
             assert_eq!(expected, block.size());
         }
@@ -255,7 +236,13 @@ mod tests {
             assert_eq!(1, heap.free_blocks.len());
             assert_eq!(3, heap.used_blocks.len());
 
-            heap.free(first_address);
+            let first_block: Block = first_address.into();
+            let second_block: Block = second_address.into();
+
+            assert_eq!(None, first_block.pred_block(heap.data as usize));
+            assert_eq!(Some(second_block), first_block.next_block(heap.heap_end));
+
+            heap.free(Address::from(first_block));
 
             // [free] [used] [used] [free]
 
@@ -269,7 +256,29 @@ mod tests {
             assert_eq!(2, heap.free_blocks.len());
             assert_eq!(1, heap.used_blocks.len());
 
-            heap.free(second_address);
+            heap.free(Address::from(second_block));
+
+            // [free]
+
+            assert_eq!(1, heap.free_blocks.len());
+            assert_eq!(0, heap.used_blocks.len());
+
+            let size = (4096 - mem::size_of::<usize>()) / mem::size_of::<usize>();
+            let entire = heap.alloc(size as HalfWord).unwrap();
+
+            let entire_block: Block = entire.into();
+
+            // [used]
+
+            let size = (4096 - mem::size_of::<usize>()) / mem::size_of::<usize>();
+
+            assert_eq!(size + 1, entire_block.size() as usize);
+            assert_eq!(None, entire_block.pred_block(heap.data as usize));
+            assert_eq!(None, entire_block.next_block(heap.heap_end));
+            assert_eq!(0, heap.free_blocks.len());
+            assert_eq!(1, heap.used_blocks.len());
+
+            heap.free(Address::from(entire_block));
 
             // [free]
 
@@ -288,10 +297,11 @@ mod tests {
 
             let block: Block = address.into();
 
-            assert_eq!(None, block.pred_block(heap.data as usize));
-            assert_eq!(None, block.next_block(heap.heap_end));
             assert_eq!(1, heap.used_blocks.len());
             assert_eq!(0, heap.free_blocks.len());
+            assert_eq!(None, block.pred_block(heap.data as usize));
+            assert_eq!(None, block.next_block(heap.heap_end));
+            assert_eq!(size + 1, block.size() as usize);
 
             heap.free(Address::from(block));
 
@@ -308,11 +318,17 @@ mod tests {
             let address = heap.alloc(1).unwrap();
             let mut block: Block = address.into();
 
-            let expected = (2 * mem::size_of::<usize>()) as HalfWord;
+            let expected = 2;
             assert_eq!(expected, block.size());
 
-            block.write_at(1, 42);
-            assert_eq!(42, *Address::from(block).add(1));
+            block.write_at(0, 42);
+            assert_eq!(42, *Address::from(block));
+
+            let next = block.next_block(heap.heap_end).unwrap();
+            let n_size = 4096 / Heap::H_SIZE - 2;
+
+            assert_eq!(n_size, next.size());
+            assert_eq!(2, next.pred_size());
         }
     }
 }
