@@ -148,7 +148,6 @@ impl Drop for Heap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::mem;
 
     #[test]
     fn test_alloc_block_returns_correct_size_when_not_aligned() {

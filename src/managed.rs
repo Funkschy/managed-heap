@@ -140,9 +140,9 @@ mod tests {
         #[test]
         fn test_integer_object_constructor() {
             let mut heap = ManagedHeap::new(100);
-            let mut i = IntegerObject::new(&mut heap, 42);
+            let mut i = IntegerObject::new(&mut heap, -42);
 
-            assert_eq!(42, i.get());
+            assert_eq!(-42, i.get());
             assert_eq!(false, i.is_marked());
 
             i.mark();
@@ -165,10 +165,95 @@ mod tests {
                 assert_eq!(1, heap.num_free_blocks());
             }
 
+            {
+                let mut roots: Vec<&mut GcRoot<IntegerObject>> = vec![&mut gc_root];
+                heap.gc(&mut roots[..]);
+                assert_eq!(1, heap.num_used_blocks());
+                assert_eq!(1, heap.num_free_blocks());
+            }
+
             gc_root.clear();
             let mut roots: Vec<&mut GcRoot<IntegerObject>> = vec![&mut gc_root];
             heap.gc(&mut roots[..]);
             assert_eq!(0, heap.num_used_blocks());
+            assert_eq!(1, heap.num_free_blocks());
+        }
+    }
+
+    mod complex {
+        use super::*;
+        use std::iter::Iterator;
+
+        #[derive(Copy, Clone)]
+        struct LinkedList(Address);
+
+        impl LinkedList {
+            pub fn new(heap: &mut ManagedHeap, value: isize, next: Option<LinkedList>) -> Self {
+                // [mark byte, value, next], each 1 byte
+                let mut address = heap.alloc(3).unwrap();
+
+                address.write(false as usize);
+                address.add(1).write(value as usize);
+
+                let next = next.map(|n| n.0.into()).unwrap_or(0);
+                address.add(2).write(next);
+
+                LinkedList(address)
+            }
+
+            pub fn next(self) -> Option<LinkedList> {
+                let next = *self.0.add(2);
+
+                if next != 0 {
+                    let address = Address::from(next);
+                    Some(LinkedList(address))
+                } else {
+                    None
+                }
+            }
+
+            pub fn value(self) -> isize {
+                *self.0.add(1) as isize
+            }
+
+            pub fn iter(self) -> Iter {
+                Iter {
+                    current: Some(self),
+                }
+            }
+        }
+
+        struct Iter {
+            current: Option<LinkedList>,
+        }
+
+        impl Iterator for Iter {
+            type Item = LinkedList;
+
+            fn next(&mut self) -> Option<LinkedList> {
+                let curr = self.current;
+                self.current = self.current.and_then(|c| c.next());
+                curr
+            }
+        }
+
+        #[test]
+        fn test_linked_list_object_constructor() {
+            let mut heap = ManagedHeap::new(200);
+
+            let list = LinkedList::new(&mut heap, 3, None);
+            assert_eq!(1, heap.num_used_blocks());
+
+            let list = LinkedList::new(&mut heap, 2, Some(list));
+            assert_eq!(2, heap.num_used_blocks());
+
+            let list = LinkedList::new(&mut heap, 1, Some(list));
+            assert_eq!(3, heap.num_used_blocks());
+
+            let sum: isize = list.iter().map(|list| list.value()).sum();
+            assert_eq!(sum, 6);
+
+            assert_eq!(3, heap.num_used_blocks());
             assert_eq!(1, heap.num_free_blocks());
         }
     }

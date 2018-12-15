@@ -3,7 +3,7 @@ use crate::block::Block;
 use core::ptr::NonNull;
 use std::ops::Deref;
 
-#[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 pub struct Address {
     ptr: usize,
 }
@@ -23,7 +23,7 @@ impl Address {
 }
 
 impl Address {
-    pub fn add(&self, value: usize) -> Self {
+    pub fn add(self, value: usize) -> Self {
         let ptr = self.ptr as *mut usize;
         unsafe { Address::from_usize_ptr(ptr.add(value)) }
     }
@@ -55,6 +55,18 @@ impl Into<Block> for Address {
             let ptr = (self.ptr as *mut usize).offset(-1) as *mut BlockHeader;
             Block::from(ptr)
         }
+    }
+}
+
+impl Into<usize> for Address {
+    fn into(self) -> usize {
+        self.ptr
+    }
+}
+
+impl From<usize> for Address {
+    fn from(value: usize) -> Address {
+        Address { ptr: value }
     }
 }
 

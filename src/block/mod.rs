@@ -140,7 +140,7 @@ impl From<*mut BlockHeader> for Block {
 
 impl PartialEq for Block {
     fn eq(&self, other: &Block) -> bool {
-        self.size() == other.size()
+        self.0 == other.0
     }
 }
 
