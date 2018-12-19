@@ -148,13 +148,13 @@ impl Eq for Block {}
 
 impl PartialOrd for Block {
     fn partial_cmp(&self, other: &Block) -> Option<Ordering> {
-        Some(self.size().cmp(&other.size()))
+        Some(self.0.cmp(&other.0))
     }
 }
 
 impl Ord for Block {
     fn cmp(&self, other: &Block) -> Ordering {
-        self.size().cmp(&other.size())
+        self.0.cmp(&other.0)
     }
 }
 

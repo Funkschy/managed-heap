@@ -5,7 +5,7 @@ use std::iter::Iterator;
 pub trait Traceable {
     /// Mark all contained Traceable Objects
     fn mark(&mut self);
-    /// Unmark all contained Traceable Objects
+    /// Unmark this Object
     fn unmark(&mut self);
     /// An iterator used for updating the addresses after moving heap content
     fn trace(&mut self) -> Box<Iterator<Item = &mut Address>>;

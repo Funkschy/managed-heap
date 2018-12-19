@@ -92,6 +92,7 @@ impl Heap {
     }
 
     pub fn free(&mut self, address: Address) {
+        // TODO clean up
         let mut block: Block = address.into();
         self.used_blocks.remove_block(block);
 
@@ -126,6 +127,10 @@ impl Heap {
             let after_next = next_block.map(|next| next.next_block(self.heap_end));
             if let Some(Some(mut after)) = after_next {
                 after.set_pred_size(size);
+            }
+        } else if let Some(mut next) = next_block {
+            if !self.is_free(next) {
+                next.set_pred_size(size);
             }
         }
     }
@@ -237,9 +242,26 @@ mod tests {
 
             let first_block: Block = first_address.into();
             let second_block: Block = second_address.into();
+            let third_block: Block = third_address.into();
 
             assert_eq!(None, first_block.pred_block(heap.data as usize));
             assert_eq!(Some(second_block), first_block.next_block(heap.heap_end));
+            assert_eq!(false, heap.is_free(first_block));
+
+            assert_eq!(
+                Some(first_block),
+                second_block.pred_block(heap.data as usize)
+            );
+            assert_eq!(Some(third_block), second_block.next_block(heap.heap_end));
+            assert_eq!(false, heap.is_free(second_block));
+
+            assert_eq!(
+                Some(second_block),
+                third_block.pred_block(heap.data as usize)
+            );
+            assert!(third_block.next_block(heap.heap_end).is_some());
+            assert!(heap.is_free(third_block.next_block(heap.heap_end).unwrap()));
+            assert_eq!(false, heap.is_free(third_block));
 
             heap.free(Address::from(first_block));
 
@@ -248,7 +270,7 @@ mod tests {
             assert_eq!(2, heap.free_blocks.len());
             assert_eq!(2, heap.used_blocks.len());
 
-            heap.free(third_address);
+            heap.free(Address::from(third_block));
 
             // [free] [used] [free]
 
@@ -278,6 +300,46 @@ mod tests {
             assert_eq!(1, heap.used_blocks.len());
 
             heap.free(Address::from(entire_block));
+
+            // [free]
+
+            assert_eq!(1, heap.free_blocks.len());
+            assert_eq!(0, heap.used_blocks.len());
+        }
+    }
+
+    #[test]
+    fn test_free_adjacent_blocks_list() {
+        unsafe {
+            let mut heap = Heap::new(4096);
+
+            let first_address = heap.alloc(10).unwrap();
+            let second_address = heap.alloc(50).unwrap();
+            let third_address = heap.alloc(100).unwrap();
+
+            // [used] [used] [used] [free]
+
+            assert_eq!(1, heap.free_blocks.len());
+            assert_eq!(3, heap.used_blocks.len());
+
+            heap.free(first_address);
+
+            // [free] [used] [used] [free]
+
+            assert_eq!(2, heap.free_blocks.len());
+            assert_eq!(2, heap.used_blocks.len());
+
+            heap.free(second_address);
+
+            // [free] [used] [free]
+
+            assert_eq!(2, heap.free_blocks.len());
+            assert_eq!(1, heap.used_blocks.len());
+
+            let block: Block = third_address.into();
+            assert!(heap.is_free(block.pred_block(heap.data as usize).unwrap()));
+
+            heap.free(Address::from(block));
 
             // [free]
 
@@ -328,6 +390,21 @@ mod tests {
 
             assert_eq!(n_size, next.size());
             assert_eq!(2, next.pred_size());
+        }
+    }
+
+    #[test]
+    fn test_alloc_too_big_returns_none() {
+        unsafe {
+            let mut heap = Heap::new(128);
+            let size = 128 / mem::size_of::<usize>() as HalfWord - 1;
+
+            heap.alloc(size).unwrap();
+            assert_eq!(1, heap.used_blocks.len());
+            assert_eq!(0, heap.free_blocks.len());
+
+            let address = heap.alloc(0);
+            assert_eq!(None, address);
         }
     }
 }

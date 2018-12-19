@@ -89,6 +89,7 @@ mod tests {
             }
         }
 
+        #[derive(Debug)]
         struct IntegerObject(Address);
 
         impl IntegerObject {
@@ -182,7 +183,28 @@ mod tests {
 
     mod complex {
         use super::*;
+        use std::fmt;
         use std::iter::Iterator;
+
+        struct MockGcRoot {
+            used_elems: Vec<LinkedList>,
+        }
+
+        impl MockGcRoot {
+            pub fn new(used_elems: Vec<LinkedList>) -> Self {
+                MockGcRoot { used_elems }
+            }
+
+            pub fn clear(&mut self) {
+                self.used_elems.clear();
+            }
+        }
+
+        impl GcRoot<LinkedList> for MockGcRoot {
+            fn children<'a>(&'a mut self) -> Box<Iterator<Item = &'a mut LinkedList> + 'a> {
+                Box::new(self.used_elems.iter_mut())
+            }
+        }
 
         #[derive(Copy, Clone)]
         struct LinkedList(Address);
@@ -223,6 +245,51 @@ mod tests {
             }
         }
 
+        impl From<Address> for LinkedList {
+            fn from(address: Address) -> Self {
+                LinkedList(address)
+            }
+        }
+
+        impl Into<Address> for LinkedList {
+            fn into(self) -> Address {
+                self.0
+            }
+        }
+
+        impl Traceable for LinkedList {
+            fn mark(&mut self) {
+                self.0.write(true as usize);
+                if let Some(mut next) = self.next() {
+                    next.mark();
+                }
+            }
+
+            fn unmark(&mut self) {
+                self.0.write(false as usize);
+            }
+
+            fn trace(&mut self) -> Box<Iterator<Item = &mut Address>> {
+                unimplemented!()
+            }
+
+            fn is_marked(&self) -> bool {
+                (*self.0) != 0
+            }
+        }
+
+        impl fmt::Debug for LinkedList {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                let string_list: Vec<String> = self
+                    .iter()
+                    .map(|l| l.value())
+                    .map(|v| format!("{}", v))
+                    .collect();
+
+                write!(f, "[{}]", string_list.join(", "))
+            }
+        }
+
         struct Iter {
             current: Option<LinkedList>,
         }
@@ -254,6 +321,121 @@ mod tests {
             assert_eq!(sum, 6);
 
             assert_eq!(3, heap.num_used_blocks());
+            assert_eq!(1, heap.num_free_blocks());
+        }
+
+        macro_rules! list {
+            ($heap:expr; $($elems:tt)+) => {
+                construct_list!($heap; [$($elems)*])
+            };
+        }
+
+        macro_rules! construct_list {
+            ($heap:expr; [] $head:expr, $($elem:expr),*) => {
+                {
+                    let mut list = LinkedList::new($heap, $head, None);
+                    $(list = LinkedList::new($heap, $elem, Some(list));)*
+                    list
+                }
+            };
+            ($heap:expr; [$first:tt $($rest:tt)*] $($reversed:tt)*) => {
+                construct_list!($heap; [$($rest)*] $first $($reversed)*)
+            };
+        }
+
+        #[test]
+        fn test_single_linked_list_gets_freed_when_not_marked() {
+            let mut heap = ManagedHeap::new(100);
+            let list = LinkedList::new(&mut heap, 1, None);
+            assert_eq!("[1]", format!("{:?}", list));
+
+            let mut gc_root = MockGcRoot::new(vec![list]);
+            assert_eq!(1, heap.num_used_blocks());
+            assert_eq!(1, heap.num_free_blocks());
+
+            {
+                let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+                heap.gc(&mut roots[..]);
+                assert_eq!(1, heap.num_used_blocks());
+                assert_eq!(1, heap.num_free_blocks());
+            }
+
+            {
+                let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+                heap.gc(&mut roots[..]);
+                assert_eq!(1, heap.num_used_blocks());
+                assert_eq!(1, heap.num_free_blocks());
+            }
+
+            gc_root.clear();
+            let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+            heap.gc(&mut roots[..]);
+            assert_eq!(0, heap.num_used_blocks());
+            assert_eq!(1, heap.num_free_blocks());
+        }
+
+        #[test]
+        fn test_double_linked_list_gets_freed_when_not_marked() {
+            let mut heap = ManagedHeap::new(100);
+            let list = list![&mut heap; 1, 2];
+            assert_eq!("[1, 2]", format!("{:?}", list));
+
+            let mut gc_root = MockGcRoot::new(vec![list]);
+            assert_eq!(2, heap.num_used_blocks());
+            assert_eq!(1, heap.num_free_blocks());
+
+            {
+                let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+                heap.gc(&mut roots[..]);
+                assert_eq!(2, heap.num_used_blocks());
+                assert_eq!(1, heap.num_free_blocks());
+                assert_eq!(false, list.is_marked());
+            }
+
+            {
+                let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+                heap.gc(&mut roots[..]);
+                assert_eq!(2, heap.num_used_blocks());
+                assert_eq!(1, heap.num_free_blocks());
+                assert_eq!(false, list.is_marked());
+            }
+
+            gc_root.clear();
+            let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+            heap.gc(&mut roots[..]);
+            assert_eq!(0, heap.num_used_blocks());
+            assert_eq!(1, heap.num_free_blocks());
+        }
+
+        #[test]
+        fn test_triple_linked_list_gets_freed_when_not_marked() {
+            let mut heap = ManagedHeap::new(1000);
+            let list = list![&mut heap; 1, 2, 3];
+
+            assert_eq!("[1, 2, 3]", format!("{:?}", list));
+
+            let mut gc_root = MockGcRoot::new(vec![list]);
+            assert_eq!(3, heap.num_used_blocks());
+            assert_eq!(1, heap.num_free_blocks());
+
+            {
+                let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+                heap.gc(&mut roots[..]);
+                assert_eq!(3, heap.num_used_blocks());
+                assert_eq!(1, heap.num_free_blocks());
+            }
+
+            {
+                let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+                heap.gc(&mut roots[..]);
+                assert_eq!(3, heap.num_used_blocks());
+                assert_eq!(1, heap.num_free_blocks());
+            }
+
+            gc_root.clear();
+            let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+            heap.gc(&mut roots[..]);
+            assert_eq!(0, heap.num_used_blocks());
             assert_eq!(1, heap.num_free_blocks());
         }
     }
