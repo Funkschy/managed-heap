@@ -10,7 +10,7 @@ An implementation of virtual heap, inspired by VMs like the JVM.
 Currently supports automatic garbage collection, but no defragmentation.
 """
 readme = "README.md"
-keywords = ["heap", "automatic", "garbage-collector", "gc", "allocator", "vm"]
+keywords = ["heap", "automatic", "garbage-collector", "gc", "vm"]
 repository = "https://github.com/funkschy/managed-heap"
 
 [dependencies]
