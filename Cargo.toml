@@ -3,5 +3,14 @@ name = "managed-heap"
 version = "0.1.0"
 authors = ["Funkschy <felixschoeller@outlook.de>"]
 edition = "2018"
+license = "MIT"
+
+description = """
+An implementation of virtual heap, inspired by VMs like the JVM.
+Currently supports automatic garbage collection, but no defragmentation.
+"""
+readme = "README.md"
+keywords = ["heap", "automatic", "garbage-collector", "gc", "allocator", "vm"]
+repository = "https://github.com/funkschy/managed-heap"
 
 [dependencies]

@@ -3,6 +3,7 @@ use super::heap::Heap;
 use super::trace::{GcRoot, Traceable};
 use super::types::HalfWord;
 
+/// A virtual Heap which can be garbage collected by calling gc().
 pub struct ManagedHeap {
     heap: Heap,
 }
@@ -34,6 +35,10 @@ impl ManagedHeap {
         self.heap.alloc(size)
     }
 
+    /// Run the mark & sweep garbage collector.
+    /// roots should return an iterator over all objects still in use.
+    /// If an object is neither returned by one of the roots, nor from another
+    /// object in the root.children(), it gets automatically freed.
     pub fn gc<T>(&mut self, roots: &mut [&mut GcRoot<T>])
     where
         T: Traceable + From<Address> + Into<Address>,
