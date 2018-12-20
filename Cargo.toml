@@ -1,12 +1,12 @@
 [package]
 name = "managed-heap"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Funkschy <felixschoeller@outlook.de>"]
 edition = "2018"
 license = "MIT"
 
 description = """
-An implementation of virtual heap, inspired by VMs like the JVM.
+An implementation of a virtual heap, inspired by VMs like the JVM.
 Currently supports automatic garbage collection, but no defragmentation.
 """
 readme = "README.md"
