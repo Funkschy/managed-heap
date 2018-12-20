@@ -2,5 +2,5 @@ mod address;
 mod block;
 pub mod heap;
 pub mod managed;
-mod trace;
+pub mod trace;
 mod types;
