@@ -25,6 +25,10 @@ impl ManagedHeap {
     pub fn num_free_blocks(&self) -> usize {
         self.heap.num_free_blocks()
     }
+
+    pub fn size(&self) -> usize {
+        self.heap.size()
+    }
 }
 
 impl ManagedHeap {
@@ -73,6 +77,7 @@ mod tests {
 
     mod simple {
         use super::*;
+        use std::ops::Add;
 
         struct MockGcRoot {
             used_elems: Vec<IntegerObject>,
@@ -190,6 +195,7 @@ mod tests {
         use super::*;
         use std::fmt;
         use std::iter::Iterator;
+        use std::ops::Add;
 
         struct MockGcRoot {
             used_elems: Vec<LinkedList>,

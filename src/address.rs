@@ -1,7 +1,7 @@
 use crate::block::header::BlockHeader;
 use crate::block::Block;
 use core::ptr::NonNull;
-use std::ops::Deref;
+use std::ops::{Add, Deref};
 
 #[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 pub struct Address {
@@ -23,13 +23,7 @@ impl Address {
 }
 
 impl Address {
-    pub fn add(self, value: usize) -> Self {
-        let ptr = self.ptr as *mut usize;
-        unsafe { Address::from_usize_ptr(ptr.add(value)) }
-    }
-}
-
-impl Address {
+    #[inline]
     pub fn as_mut(&mut self) -> *mut usize {
         self.ptr as *mut usize
     }
@@ -67,6 +61,17 @@ impl Into<usize> for Address {
 impl From<usize> for Address {
     fn from(value: usize) -> Address {
         Address { ptr: value }
+    }
+}
+
+impl Add<usize> for Address {
+    type Output = Address;
+
+    /// Adds a value to the address. If the value is greater than the block
+    /// size, the result is undefined behaviour.
+    #[inline]
+    fn add(self, value: usize) -> Self {
+        unsafe { Address::from_usize_ptr((self.ptr as *mut usize).add(value)) }
     }
 }
 

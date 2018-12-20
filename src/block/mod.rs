@@ -213,7 +213,7 @@ mod tests {
             block.write_at(1, 21);
 
             let address = Address::from(block);
-            assert_eq!(21, *address.add(1));
+            assert_eq!(21, *(address + 1));
 
             // this should panic
             block.write_at(3, 13);
