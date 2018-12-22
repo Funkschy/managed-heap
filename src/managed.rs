@@ -421,33 +421,41 @@ mod tests {
         #[test]
         fn test_triple_linked_list_gets_freed_when_not_marked() {
             let mut heap = ManagedHeap::new(1000);
-            let list = list![&mut heap; 1, 2, 3];
+            // Repeat a couple of times just to be sure
+            for _i in 0..20 {
+                let list = list![&mut heap; 1, 2, 3];
 
-            assert_eq!("[1, 2, 3]", format!("{:?}", list));
+                assert_eq!("[1, 2, 3]", format!("{:?}", list));
 
-            let mut gc_root = MockGcRoot::new(vec![list]);
-            assert_eq!(3, heap.num_used_blocks());
-            assert_eq!(1, heap.num_free_blocks());
-
-            {
-                let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
-                heap.gc(&mut roots[..]);
+                let mut gc_root = MockGcRoot::new(vec![list]);
                 assert_eq!(3, heap.num_used_blocks());
                 assert_eq!(1, heap.num_free_blocks());
-            }
 
-            {
+                {
+                    let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+                    heap.gc(&mut roots[..]);
+                    assert_eq!(3, heap.num_used_blocks());
+                    assert_eq!(1, heap.num_free_blocks());
+                }
+
+                {
+                    let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+                    heap.gc(&mut roots[..]);
+                    assert_eq!(3, heap.num_used_blocks());
+                    assert_eq!(1, heap.num_free_blocks());
+                }
+
+                gc_root.clear();
                 let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
                 heap.gc(&mut roots[..]);
-                assert_eq!(3, heap.num_used_blocks());
+                assert_eq!(0, heap.num_used_blocks());
+                assert_eq!(1, heap.num_free_blocks());
+
+                let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
+                heap.gc(&mut roots[..]);
+                assert_eq!(0, heap.num_used_blocks());
                 assert_eq!(1, heap.num_free_blocks());
             }
-
-            gc_root.clear();
-            let mut roots: Vec<&mut GcRoot<LinkedList>> = vec![&mut gc_root];
-            heap.gc(&mut roots[..]);
-            assert_eq!(0, heap.num_used_blocks());
-            assert_eq!(1, heap.num_free_blocks());
         }
     }
 }

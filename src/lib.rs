@@ -1,7 +1,7 @@
 //! An implementation of virtual heap, inspired by VMs like the JVM.
 //! It can be used while creating your own virtual machine in Rust.
 //!
-//! To using it, you have to implement the traits in the trace module.
+//! To use it, you have to implement the traits in the trace module.
 //!
 //! # Example
 //! ```
@@ -95,4 +95,4 @@ mod block;
 mod heap;
 pub mod managed;
 pub mod trace;
-mod types;
+pub mod types;
