@@ -26,8 +26,12 @@ impl ManagedHeap {
         self.heap.num_free_blocks()
     }
 
-    pub fn size(&self) -> usize {
+    pub fn total_size(&self) -> usize {
         self.heap.size()
+    }
+
+    pub fn used_size(&self) -> usize {
+        self.heap.used_size()
     }
 }
 
@@ -93,7 +97,7 @@ mod tests {
             }
         }
 
-        impl GcRoot<IntegerObject> for MockGcRoot {
+        unsafe impl GcRoot<IntegerObject> for MockGcRoot {
             fn children<'a>(&'a mut self) -> Box<Iterator<Item = &'a mut IntegerObject> + 'a> {
                 Box::new(self.used_elems.iter_mut())
             }
@@ -130,17 +134,13 @@ mod tests {
             }
         }
 
-        impl Traceable for IntegerObject {
+        unsafe impl Traceable for IntegerObject {
             fn mark(&mut self) {
                 self.0.write(true as usize);
             }
 
             fn unmark(&mut self) {
                 self.0.write(false as usize);
-            }
-
-            fn trace(&mut self) -> Box<Iterator<Item = &mut Address>> {
-                unimplemented!()
             }
 
             fn is_marked(&self) -> bool {
@@ -211,7 +211,7 @@ mod tests {
             }
         }
 
-        impl GcRoot<LinkedList> for MockGcRoot {
+        unsafe impl GcRoot<LinkedList> for MockGcRoot {
             fn children<'a>(&'a mut self) -> Box<Iterator<Item = &'a mut LinkedList> + 'a> {
                 Box::new(self.used_elems.iter_mut())
             }
@@ -268,7 +268,7 @@ mod tests {
             }
         }
 
-        impl Traceable for LinkedList {
+        unsafe impl Traceable for LinkedList {
             fn mark(&mut self) {
                 self.0.write(true as usize);
                 if let Some(mut next) = self.next() {
@@ -278,10 +278,6 @@ mod tests {
 
             fn unmark(&mut self) {
                 self.0.write(false as usize);
-            }
-
-            fn trace(&mut self) -> Box<Iterator<Item = &mut Address>> {
-                unimplemented!()
             }
 
             fn is_marked(&self) -> bool {

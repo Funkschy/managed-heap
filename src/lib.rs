@@ -25,7 +25,7 @@
 //!     }
 //! }
 //!
-//! impl GcRoot<IntegerObject> for MockGcRoot {
+//! unsafe impl GcRoot<IntegerObject> for MockGcRoot {
 //!     fn children<'a>(&'a mut self) -> Box<Iterator<Item = &'a mut IntegerObject> + 'a> {
 //!         Box::new(self.used_elems.iter_mut())
 //!     }
@@ -62,17 +62,13 @@
 //!     }
 //! }
 //!
-//! impl Traceable for IntegerObject {
+//! unsafe impl Traceable for IntegerObject {
 //!     fn mark(&mut self) {
 //!         self.0.write(true as usize);
 //!     }
 //!
 //!     fn unmark(&mut self) {
 //!         self.0.write(false as usize);
-//!     }
-//!
-//!     fn trace(&mut self) -> Box<Iterator<Item = &mut Address>> {
-//!         unimplemented!()
 //!     }
 //!
 //!     fn is_marked(&self) -> bool {

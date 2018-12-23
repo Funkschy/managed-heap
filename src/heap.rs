@@ -10,6 +10,7 @@ use std::mem;
 
 pub struct Heap {
     size: usize,
+    used_size: usize,
     data: *mut usize,
     heap_end: usize,
     layout: Layout,
@@ -39,6 +40,7 @@ impl Heap {
 
         Heap {
             size,
+            used_size: 0,
             data,
             heap_end,
             layout,
@@ -79,6 +81,7 @@ impl Heap {
     fn alloc_block(&mut self, size: HalfWord) -> Option<Block> {
         let total_size = size + 1;
         let mut block = self.free_blocks.get_block(total_size)?;
+        self.used_size += total_size as usize;
 
         if block.size() > (total_size + 2) {
             unsafe {
@@ -97,6 +100,7 @@ impl Heap {
         self.used_blocks.remove_block(block);
 
         let mut size = block.size();
+        self.used_size -= size as usize;
 
         let next_block = block.next_block(self.heap_end);
         let mut freed_next = false;
@@ -139,6 +143,10 @@ impl Heap {
 impl Heap {
     pub fn used<'a>(&'a self) -> Box<Iterator<Item = &Block> + 'a> {
         self.used_blocks.iter()
+    }
+
+    pub fn used_size(&self) -> usize {
+        self.used_size
     }
 }
 
@@ -199,14 +207,17 @@ mod tests {
 
             assert_eq!(1, heap.free_blocks.len());
             assert_eq!(1, heap.used_blocks.len());
+            assert_eq!(11, heap.used_size());
 
             heap.alloc(29).unwrap();
             assert_eq!(1, heap.free_blocks.len());
             assert_eq!(2, heap.used_blocks.len());
+            assert_eq!(41, heap.used_size());
 
             heap.alloc(0).unwrap();
             assert_eq!(1, heap.free_blocks.len());
             assert_eq!(3, heap.used_blocks.len());
+            assert_eq!(42, heap.used_size());
         }
     }
 

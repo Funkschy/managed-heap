@@ -1,6 +1,6 @@
 [package]
 name = "managed-heap"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Funkschy <felixschoeller@outlook.de>"]
 edition = "2018"
 license = "MIT"
