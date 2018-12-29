@@ -9,7 +9,7 @@ pub struct Address {
 }
 
 impl Address {
-    pub fn new(ptr: NonNull<BlockHeader>) -> Self {
+    pub(crate) fn new(ptr: NonNull<BlockHeader>) -> Self {
         unsafe {
             Address {
                 ptr: ptr.as_ptr().add(1) as usize,
